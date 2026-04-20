@@ -1,0 +1,50 @@
+language_name_en,count,detected_lang_code
+English,10169,en
+Afrikaans,558,af
+Somali,309,so
+Italian,256,it
+Romanian,232,ro
+Norwegian,193,no
+French,188,fr
+Catalan,186,ca
+Indonesian,159,id
+Tagalog,138,tl
+Slovenian,125,sl
+Polish,119,pl
+Welsh,108,cy
+Czech,108,cs
+Dutch,81,nl
+Swahili,79,sw
+Albanian,77,sq
+Danish,69,da
+Bengali,63,bn
+Arabic,62,ar
+Estonian,60,et
+Spanish,56,es
+Croatian,53,hr
+Unknown (undetected or too short),50,unknown
+Swedish,48,sv
+Portuguese,40,pt
+Russian,38,ru
+Finnish,29,fi
+Turkish,24,tr
+Slovak,24,sk
+Latvian,17,lv
+Hindi,14,hi
+Persian (Farsi),13,fa
+Hungarian,12,hu
+German,9,de
+Lithuanian,8,lt
+Urdu,6,ur
+Thai,5,th
+Chinese (Simplified),4,zh-cn
+Vietnamese,4,vi
+Tamil,3,ta
+Ukrainian,2,uk
+Korean,2,ko
+Nepali,1,ne
+Other language (el),1,el
+Other language (ml),1,ml
+Marathi,1,mr
+Macedonian,1,mk
+Kannada,1,kn

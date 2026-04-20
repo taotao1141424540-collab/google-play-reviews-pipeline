@@ -1,0 +1,30 @@
+# --- Python ---
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.Python
+
+# --- Editor / OS ---
+.idea/
+.vscode/
+.DS_Store
+.Rhistory
+
+# Matplotlib cache (optional local path)
+.mplconfig/
+
+# --- Large / regenerable data (run pipeline to recreate) ---
+data/raw/
+data/processed/
+data/warehouse/
+*.db
+
+# Optional: keep the repo lightweight — uncomment to exclude generated EDA artifacts
+# reports/**/*.csv
+# reports/**/*.png
+# reports/**/*.xlsx
+# reports/**/*.pptx
+# reports/**/*.pdf

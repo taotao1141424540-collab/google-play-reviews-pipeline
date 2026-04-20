@@ -1,0 +1,4 @@
+stage,file,rows
+raw,data/raw/google_play_reviews_raw.csv,15405
+after_P0_all_languages,data/processed/clean_all_languages.csv,13806
+after_P0_english_only,data/processed/clean_en_only.csv,10169

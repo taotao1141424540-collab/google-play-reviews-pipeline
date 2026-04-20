@@ -1,0 +1,6 @@
+metric,value,source,n_rows
+english_share_on_clean_all,0.736564,computed from clean_all_languages (mean of is_en),13806
+raw_rows,15405,quality_report.csv,
+clean_all_rows,13806,quality_report.csv,
+english_rate_after_p0,0.7366,quality_report.csv,
+clean_en_rows,10169,quality_report.csv,

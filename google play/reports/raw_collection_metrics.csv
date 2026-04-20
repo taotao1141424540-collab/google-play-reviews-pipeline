@@ -1,0 +1,15 @@
+﻿metric,value
+total_rows,15405.0
+unique_review_id_rows,15405.0
+clean_rows,13806.0
+dedup_keep_ratio,1.0
+empty_text_ratio,0.0
+short_text_ratio_lt5,0.1038
+parseable_time_ratio,1.0
+parseable_score_ratio,1.0
+missing_review_id_ratio,0.0
+duplicate_review_id_rows,0.0
+duplicate_text_hash_rows,2810.0
+has_dev_reply_ratio,0.1457
+parseable_replied_at_when_reply_ratio,1.0
+apps_count,14.0

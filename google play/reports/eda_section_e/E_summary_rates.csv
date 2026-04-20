@@ -1,0 +1,3 @@
+metric,value,note
+time_anomaly_rate,0.5857999803323828,heuristic spike-hour flag
+spam_bot_suspect_rate,0.5971088602615793,heuristic composite flag

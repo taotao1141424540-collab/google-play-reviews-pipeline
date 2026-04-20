@@ -1,0 +1,17 @@
+﻿section,metric,value
+run,run_time,2026-04-20 01:38:47
+run,raw_input_file,/Users/williamzhang/Desktop/Google Play 1w+/google play/data/raw/google_play_reviews_raw.csv
+p0,raw_rows,15405
+p0,duplicate_rate,0.0
+p0,empty_text_rate,0.0
+p0,short_text_rate_lt5,0.1038
+p0,parseable_time_rate,1.0
+p0,parseable_score_rate,1.0
+p0,clean_all_rows,13806
+p1,english_rate_after_p0,0.7366
+p1,noise_rate_after_p0,0.002
+p2,missing_key_fields_rate,0.0
+p2,spam_bot_suspect_rate,0.6579
+p2,inconsistent_rating_rate,0.0405
+p2,time_anomaly_rate,0.6246
+output,clean_en_rows,10169

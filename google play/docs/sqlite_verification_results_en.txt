@@ -1,0 +1,57 @@
+# SQLite verification report
+# database: /Users/williamzhang/Desktop/Google Play 1w+/google play/data/warehouse/play_reviews_en.db
+
+## ingestion_meta
+SELECT key, value FROM ingestion_meta ORDER BY key
+key | value
+--------------
+app_count | 14
+data_subset | clean_en_only
+loaded_at_utc | 2026-04-20T08:33:40Z
+source_file | data/processed/clean_en_only.csv
+source_rows | 10169
+
+## row_counts
+SELECT 'apps' AS tbl, COUNT(*) FROM apps UNION ALL SELECT 'reviews', COUNT(*) FROM reviews
+tbl | COUNT(*)
+-----------------
+apps | 14
+reviews | 10169
+
+## reviews_by_app_top5
+SELECT app_id, COUNT(*) AS n FROM reviews GROUP BY app_id ORDER BY n DESC LIMIT 5
+app_id | n
+-------------
+com.flyersoft.moonreaderp | 1111
+ai.character.app | 1110
+jp.ne.ibis.ibispaint.app | 978
+com.qidian.Int.reader | 951
+com.twitter.android | 875
+
+## reviews_by_score
+SELECT score, COUNT(*) AS n FROM reviews GROUP BY score ORDER BY score
+score | n
+------------
+1.0 | 3680
+2.0 | 569
+3.0 | 625
+4.0 | 990
+5.0 | 4305
+
+## null_keys
+SELECT SUM(CASE WHEN review_id IS NULL OR review_id = '' THEN 1 ELSE 0 END) AS bad_review_id FROM reviews
+bad_review_id
+----------------
+0
+
+## english_flag_dist
+SELECT is_en, COUNT(*) FROM reviews GROUP BY is_en
+is_en | COUNT(*)
+-------------------
+1 | 10169
+
+## avg_content_len
+SELECT ROUND(AVG(content_len), 2) AS mean_len, COUNT(*) AS n FROM reviews
+mean_len | n
+---------------
+125.17 | 10169

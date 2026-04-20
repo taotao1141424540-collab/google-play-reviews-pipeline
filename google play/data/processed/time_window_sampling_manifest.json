@@ -1,0 +1,16 @@
+{
+  "source_file": "data/processed/clean_en_only.csv",
+  "source_rows": 10169,
+  "generated_at_utc": "2026-04-20T09:04:34Z",
+  "steps": [
+    "time_split"
+  ],
+  "input_rows": 10169,
+  "split_cutoff": "2026-04-15",
+  "train_rows": 5045,
+  "val_rows": 5124,
+  "outputs": {
+    "train": "/private/tmp/t.csv",
+    "val": "/private/tmp/v.csv"
+  }
+}
