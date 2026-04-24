@@ -15,7 +15,9 @@ google play/
 ├── .mplconfig/                  # Matplotlib cache (set MPLCONFIGDIR when plotting in EDA)
 ├── config/
 │   ├── README.md                # Column descriptions for app_list
-│   └── app_list.xlsx            # Apps to scrape (required: app_id)
+│   ├── app_list.xlsx            # Apps to scrape (required: app_id)
+│   └── monitoring.yml           # Monitoring thresholds & drift params (`07_monitor`)
+├── logs/                        # Runtime: `pipeline_runs.jsonl` (written by `07_monitor` scripts)
 ├── data/
 │   ├── raw/
 │   │   └── google_play_reviews_raw.csv    # Scraper output (default)
@@ -36,6 +38,7 @@ google play/
 │   ├── collection_summary.md
 │   ├── raw_collection_metrics.csv
 │   ├── quality_report.csv                 # Layered quality metrics (p0/p1/p2)
+│   ├── monitoring/                      # Runtime: metric history, alerts, report (`07_monitor`)
 │   ├── eda_sections_workbook.xlsx         # All EDA sheets (merge script)
 │   ├── eda_section_a_workbook.xlsx … e   # Per-section workbooks
 │   ├── EDA_Conclusion_Bilingual.pptx / .pdf   # Deck (04_export)
@@ -49,9 +52,14 @@ google play/
 │   ├── 05_warehouse/
 │   │   ├── load_to_sqlite.py
 │   │   └── run_sqlite_verification.py
-│   └── 06_insights/
-│       ├── export_spike_days.py
-│       └── apply_time_window_sampling.py
+│   ├── 06_insights/
+│   │   ├── export_spike_days.py
+│   │   └── apply_time_window_sampling.py
+│   └── 07_monitor/
+│       ├── collect_run_metrics.py
+│       ├── check_drift_and_alerts.py
+│       ├── _runlog.py
+│       └── smoke_runlog.py
 └── sql/
     ├── schema.sql               # DDL (executed inside load_to_sqlite)
     └── verify.sql               # Ad-hoc CLI checks (see below)
@@ -60,6 +68,7 @@ google play/
 Notes:
 
 - **`run_sqlite_verification.py`** lives under `scripts/05_warehouse/` (see §6).
+- **`logs/`** and **`reports/monitoring/`** are created when you run **`scripts/07_monitor/`** (see §4.3); they may be absent in a fresh clone until then.
 - There is **no** `templates/`, **no** `scripts/README.md`, **no** `docs/time_window_sampling_note.md` in this tree by default (you can add a long-form time-window strategy note under `docs/` if needed; spike + sampling scripts still work standalone).
 - **`scripts/01_collect/.idea/`** is IDE metadata and can be ignored.
 
@@ -92,6 +101,9 @@ Main outputs: **`clean_all_languages.csv`** (post-P0, all languages) and **`clea
 | **`scripts/05_warehouse/`** | `run_sqlite_verification.py` | Query DB → **`docs/sqlite_verification_results*.txt`**; use **`--both`** to verify both databases |
 | **`scripts/06_insights/`** | `export_spike_days.py` | Read **`reports/eda_section_b/B3_daily_volume.csv`** → **`docs/spike_dates_top10.csv`** |
 | **`scripts/06_insights/`** | `apply_time_window_sampling.py` | Optional: spike-day removal / per-day cap / time split on `clean_en_only` |
+| **`scripts/07_monitor/`** | `collect_run_metrics.py` | After upstream reports exist: append **`reports/monitoring/data_quality_history.csv`** + **`distribution_history.csv`** |
+| **`scripts/07_monitor/`** | `check_drift_and_alerts.py` | Read config + histories + SQLite: **`reports/monitoring/alerts.csv`**, **`monitoring_report.md`**; exit **`1`** if any ERROR |
+| **`scripts/07_monitor/`** | `_runlog.py`, `smoke_runlog.py` | Run-level JSONL logging + small self-test for the log writer |
 
 ---
 
