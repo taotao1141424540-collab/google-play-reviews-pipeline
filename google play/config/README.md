@@ -18,4 +18,4 @@ Read by `scripts/01_collect/collect_reviews.py` → `find_app_list()`.
 
 Used by `scripts/07_monitor/check_drift_and_alerts.py`: hard thresholds, drift tuning, expected app count, and optional mute rules. If missing, the script falls back to built-in defaults and records a WARN in `alerts.csv` / `monitoring_report.md`.
 
-See **`monitoring layer设计方案/monitoring_impl_spec_en.md`** (or `*_cn.md`) for full field semantics.
+See design specs under the repository root folder **`monitoring layer设计方案/`** — e.g. **`monitoring_impl_spec_en.md`** or **`monitoring_impl_spec_cn.md`** (paths are relative to the **repo root**, not to `google play/config/`).

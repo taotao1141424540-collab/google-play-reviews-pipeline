@@ -114,7 +114,8 @@ google play/
 
 ```bash
 python3 -m venv .venv && source .venv/bin/activate
-pip install pandas openpyxl google-play-scraper langdetect matplotlib python-pptx reportlab pyyaml
+pip install -r requirements.txt
+# 或等价地：pip install pandas openpyxl google-play-scraper langdetect matplotlib python-pptx reportlab pyyaml
 export MPLCONFIGDIR="$(pwd)/.mplconfig" && mkdir -p .mplconfig
 ```
 
@@ -138,14 +139,19 @@ export MPLCONFIGDIR="$(pwd)/.mplconfig" && mkdir -p .mplconfig
 |  | `sqlite3 data/warehouse/play_reviews_en.db < sql/verify.sql` | 英文库同上 |
 | 10 | `python3 scripts/05_warehouse/run_sqlite_verification.py --both` | 两个 db 均存在时 |
 | 11 | `python3 scripts/06_insights/apply_time_window_sampling.py ...` | 可选；见脚本 `--help` |
-| 12 | `python3 scripts/07_monitor/collect_run_metrics.py` | 在 §4.2 步骤 1–4（或完整跑）之后：追加 `reports/monitoring/*_history.csv` |
-| 13 | `python3 scripts/07_monitor/check_drift_and_alerts.py` | 在步骤 12 之后：写入 `alerts.csv`、`monitoring_report.md`；若有 ERROR 则退出码为 `1` |
+| 12 | `python3 scripts/07_monitor/collect_run_metrics.py` | 上游 CSV 已存在即可（至少 §4.2 步骤 **1–4**，或含 EDA 的完整跑）：追加 `reports/monitoring/*_history.csv` |
+| 13 | `python3 scripts/07_monitor/check_drift_and_alerts.py` | 在步骤 **12** 之后；会读 `data/warehouse/play_reviews.db` 做可选 SQLite 行数对齐——若希望该检查生效，请在步骤 **7–8** 入库之后再跑（否则元数据子集未知时多为 INFO 跳过） |
 
 **说明：** `sql/schema.sql` **不要单独跑**；`load_to_sqlite.py` 会在连接数据库后 `executescript(schema.sql)`。
 
 ### 4.3 监控层（`scripts/07_monitor/`）
 
-对流水线产物只读不写业务数据；阈值在 `config/monitoring.yml`。典型用法（一次完整跑之后）：
+对流水线产物只读不写业务数据；阈值在 `config/monitoring.yml`。
+
+- **`collect_run_metrics.py`** 与 **`check_drift_and_alerts.py`** 均在 `main` 外包 **`with run_logger(...)`**，每次运行会向 **`logs/pipeline_runs.jsonl`** 追加一行 JSON（与设计文档一致；Phase 2 可扩展到 01–06）。
+- 可选自检：**`python3 scripts/07_monitor/smoke_runlog.py`**，验证 `_runlog` 能写入 JSONL。
+
+典型用法（一次完整跑之后）：
 
 ```bash
 python3 scripts/07_monitor/collect_run_metrics.py
@@ -216,7 +222,7 @@ python3 scripts/07_monitor/check_drift_and_alerts.py
 | 尖峰 | `docs/spike_dates_top10.csv`、`docs/export_spike_days_readme.md` |
 | 数仓 | `data/warehouse/play_reviews.db`、`play_reviews_en.db` |
 | 校验文本 | `docs/sqlite_verification_results*.txt` |
-| 监控 | `reports/monitoring/*_history.csv`、`alerts.csv`、`monitoring_report.md`、`logs/pipeline_runs.jsonl` |
+| 监控（本地，跑过 §4.3 后） | `reports/monitoring/*_history.csv`、`alerts.csv`、`monitoring_report.md`、`logs/pipeline_runs.jsonl` — **默认不提交**到 Git（见仓库根 `.gitignore`）；用步骤 12–13 重新生成 |
 | 建模前采样（若已跑） | `data/processed/clean_en_time_window.csv`、`time_window_sampling_manifest.json` |
 
 ---
@@ -230,7 +236,7 @@ python3 scripts/07_monitor/check_drift_and_alerts.py
 从空目录到产出完整报表/数据库，建议按同一套步骤复现：
 
 1. **克隆** 本仓库到本地。
-2. **Python 环境：** 建议使用 **Python 3.10+**（一般 3.9+ 也可）。创建虚拟环境并按 **§4.1** 安装依赖（`pandas`、`openpyxl`、`google-play-scraper`、`langdetect`、`matplotlib`、`python-pptx`、`reportlab` 等）。
+2. **Python 环境：** 建议使用 **Python 3.10+**（一般 3.9+ 也可）。创建虚拟环境后执行 **`pip install -r requirements.txt`**（含监控用的 **`pyyaml`**）。
 3. **`config/app_list.xlsx`：** 按 **`config/README.md`** 填写（至少 **`app_id`**）。采集需要 **联网**；耗时与 `target_reviews` 等相关。
 4. **与上文 Data access 一致：** 克隆后若 **`data/`** 下无大文件属正常；请从 **`scripts/01_collect/collect_reviews.py`** 起按 **§7** 依次执行以生成数据。
 5. **随机性：** 涉及抽样的脚本提供固定种子参数（如 **`apply_time_window_sampling.py`** 的 **`--random-state`**）；同一次配置下抽样可重复。原始评论行数仍受**采集时刻**与上游接口影响。
@@ -240,7 +246,7 @@ python3 scripts/07_monitor/check_drift_and_alerts.py
 
 ## 10. Git 与大文件
 
-建议将 **`data/`** 大 CSV、**`data/warehouse/*.db`**、大型 xlsx 等加入 **`.gitignore`**，仓库内只保留小样本或说明；完整数据可用网盘 / Release 并在文档中注明下载方式（与 **§9 可复现** 配套）。
+建议将 **`data/`** 大 CSV、**`data/warehouse/*.db`**、大型 xlsx，以及 **`google play/logs/`**、**`google play/reports/monitoring/`**（监控运行时产物）等加入 **`.gitignore`**；仓库内只保留小样本或说明。完整数据可用网盘 / Release 并在文档中注明下载方式（与 **§9 可复现** 配套）。
 
 ---
 

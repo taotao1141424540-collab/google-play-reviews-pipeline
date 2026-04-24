@@ -24,26 +24,33 @@
 
 ## 1. 仓库落地（File Layout）
 
-在 `google play/` 下新增 **6 个文件 + 2 个目录**，**不改动** 01–06 任何业务脚本。
+在 `google play/` 下 **不改动** 01–06 业务脚本；版本控制里跟踪的监控相关**源码**包括：
+
+- **`config/monitoring.yml`** — 阈值与漂移参数（可改）。
+- **`scripts/07_monitor/`** 下 **5 个** `.py`：`__init__.py`、`_runlog.py`、`collect_run_metrics.py`、`check_drift_and_alerts.py`、`smoke_runlog.py`（本地自检 JSONL，可选运行）。
+- **`requirements.txt`** 增加 **`pyyaml>=6.0`**（与仓库其余依赖一并维护）。
+
+首次运行监控脚本后由程序创建：**`logs/`**（`pipeline_runs.jsonl`）、**`reports/monitoring/`**（history / alerts / report）。本仓库根 **`.gitignore`** 默认忽略 `google play/logs/` 与 `google play/reports/monitoring/` 的运行产物，克隆后需自行跑脚本生成。
 
 ```
 google play/
 ├── config/
 │   └── monitoring.yml                          # 【新增】阈值、漂移参数、豁免
-├── logs/                                       # 【新增目录】
-│   └── pipeline_runs.jsonl                     # 【运行时产生】每次 run 一行
+├── logs/                                       # 【运行时目录】
+│   └── pipeline_runs.jsonl                     # collect / check 每次 main 经 run_logger 追加一行
 ├── reports/
-│   └── monitoring/                             # 【新增目录】
-│       ├── data_quality_history.csv            # 【运行时产生】append
-│       ├── distribution_history.csv            # 【运行时产生】append
-│       ├── alerts.csv                          # 【运行时产生】append
-│       └── monitoring_report.md                # 【运行时产生】每次覆盖
+│   └── monitoring/                             # 【运行时目录】
+│       ├── data_quality_history.csv            # append
+│       ├── distribution_history.csv            # append
+│       ├── alerts.csv                          # append
+│       └── monitoring_report.md                # 每次覆盖
 └── scripts/
     └── 07_monitor/
-        ├── __init__.py                         # 【新增】
-        ├── _runlog.py                          # 【新增】run-level logging 上下文管理器
-        ├── collect_run_metrics.py              # 【新增】聚合 → history CSV
-        └── check_drift_and_alerts.py           # 【新增】比对 → alerts + report
+        ├── __init__.py
+        ├── _runlog.py                          # run_logger 上下文 → JSONL
+        ├── collect_run_metrics.py              # 聚合 → history CSV；main 包 run_logger
+        ├── check_drift_and_alerts.py           # 比对 → alerts + report；main 包 run_logger
+        └── smoke_runlog.py                     # 可选：验证 _runlog 写入
 ```
 
 **设计原则（落地体现）**：
@@ -66,7 +73,7 @@ google play/
 | `reports/eda_section_b/B3_daily_volume.csv` | 同上 | `date, reviews` | 字段留空 |
 | `reports/eda_section_c/C2_english_subset_summary.csv` | 同上 | `english_share` 或等价字段 | 字段留空 |
 
-> **契约要点**：**监控只在读不到数据时写空值，从不在上游缺失时报 ERROR**。ERROR 永远来自**值的违规**，不是**文件的缺失**。
+> **契约要点**：**`collect_run_metrics`** 在读不到上游文件时把对应列写成 **NaN/空**，**不**写 `alerts.csv`。**`check_drift_and_alerts`** 在 **history 缺失/为空** 时发 **WARN** 并早退；**ERROR** 仍只来自**指标值越界**或 **SQLite 行数不一致**等，不因「某张上游业务 CSV 没生成」直接 ERROR。
 
 ### 2.2 写出（下游，新产物）
 
@@ -124,7 +131,7 @@ run_ts, level, metric, current, baseline_or_threshold, rule, message
 ```
 
 - `level ∈ {INFO, WARN, ERROR}`。
-- `rule ∈ {threshold_max, threshold_min, psi_max, zscore_max, spike_ratio, eq}`。
+- `rule` 含阈值/漂移类：`threshold_max`、`threshold_min`、`psi_max`、`zscore_max`、`spike_ratio`、`eq`；另有降级与元数据类如 **`cold_start`**、**`missing`**、**`empty`**、**`parse_error`**、**`unknown_subset`**、`mismatch` 等（以实现代码为准，不必穷举）。
 
 #### `reports/monitoring/monitoring_report.md`
 
@@ -274,14 +281,14 @@ class Alert:
 完整模板见设计文档 §6。此处只说明字段的**加载契约**：
 
 ```python
-# 必需的顶层键；缺失任一 → WARN: "config_section_missing" 并用内置默认
-required_sections = ["thresholds", "drift", "expected"]
+# 逻辑上等价：将 YAML 中存在的顶层段合并进内置 DEFAULTS（未写的键保留默认）
+# 仅当文件缺失或 PyYAML 解析失败时整文件回退 DEFAULTS，并产生 config_file WARN
 
-# 内置默认（当 monitoring.yml 缺失时启用）
+# 内置默认（当 monitoring.yml 缺失或解析失败时启用）
 DEFAULTS = {
     "thresholds": {...},  # 同设计文档 §6
     "drift":      {...},
-    "expected":   {"apps_count": 31},
+    "expected":   {"apps_count": 14},  # 与仓库 monitoring.yml 对齐；仅作 yml 缺失时的回退
     "mute":       [],
 }
 ```
@@ -322,13 +329,15 @@ pyyaml>=6.0
 
 | 情况 | 代码行为 |
 |------|---------|
-| 上游 CSV 缺失 | 对应列写 NaN；同时写一条 `WARN: <file>_missing` |
-| `monitoring.yml` 缺失 | 用 DEFAULTS；`WARN: config_missing_using_defaults` |
-| history < `baseline_window` | 跳过漂移；`INFO: cold_start_skipping_drift` |
-| PSI 分子/分母含 0 | 加 `eps=1e-6` 避免 log(0)；不报错 |
-| 写 `jsonl` 失败（磁盘满） | 抛异常；业务脚本仍按原逻辑 re-raise（仅 Phase 2 有影响） |
+| 上游 CSV 缺失（`collect_run_metrics` 读入） | 对应 history 列写 **NaN**；**不向** `alerts.csv` 追加「某文件缺失」行（collect 不写 alerts） |
+| `data_quality_history.csv` 缺失或空文件 | `check_drift_and_alerts`：**WARN**（`metric=data_quality_history`，rule=`missing` / `empty`），**提前返回** exit `0`，不执行硬阈值 / SQLite / 漂移 |
+| `distribution_history.csv` 缺失或空 | **WARN**（`metric=distribution_history`，rule=`missing`），跳过整段漂移；硬阈值仍执行 |
+| `distribution_history` 行数 `< baseline_window + 1`（默认 `< 6`） | 跳过 PSI / z-score / 尖峰 / en_share 漂移；**INFO**（`metric=drift`，rule=`cold_start`） |
+| `monitoring.yml` 缺失或无法解析 | 使用内置 **DEFAULTS**；**WARN**（`metric=config_file`，rule=`missing` 或 `parse_error`） |
+| PSI 分子/分母含 0 | `eps=1e-6` 避免 log(0)；不抛异常 |
+| 写 `jsonl` 失败（磁盘满等） | 抛异常；监控脚本随 `run_logger` 传播（Phase 2 业务脚本外包时同理） |
 
-**要点**：监控**宁可漏报也不能误杀**；所有可恢复异常都降级为 WARN。
+**要点**：ERROR 仅来自硬阈值违规、SQLite 行数不一致等；缺失 history 时宁可早退 WARN，也不伪造硬阈值结果。
 
 ---
 
@@ -369,10 +378,12 @@ ls reports/monitoring/
 - 再跑 drift；
 - **期望**：相应 WARN 行出现。
 
-### 9.4 冷启动
+### 9.4 冷启动（漂移）
 
-- 清空 `data_quality_history.csv`；
-- **期望**：只跑硬阈值，report 里标注 `cold_start_skipping_drift`。
+- 保留非空的 `data_quality_history.csv`（至少一行，否则 check 会 WARN 早退），使 **`distribution_history.csv` 行数少于 `baseline_window + 1`**（默认少于 6 行）；
+- **期望**：`check_drift_and_alerts` 仍跑硬阈值与 SQLite 逻辑；漂移段跳过，`monitoring_report.md` 的 INFO 列表中出现 **`drift`** / rule **`cold_start`**（文案为「历史行数不足」类说明）。
+
+> 注意：若 **`data_quality_history.csv` 本身缺失或为空**，当前实现**不会**执行硬阈值，而是 WARN 后退出（须先跑 `collect_run_metrics.py`）。
 
 ---
 
@@ -429,7 +440,7 @@ echo "exit=$?"
 cd "google play"
 mkdir -p config logs reports/monitoring scripts/07_monitor
 touch config/monitoring.yml
-touch scripts/07_monitor/{__init__.py,_runlog.py,collect_run_metrics.py,check_drift_and_alerts.py}
+touch scripts/07_monitor/{__init__.py,_runlog.py,collect_run_metrics.py,check_drift_and_alerts.py,smoke_runlog.py}
 ```
 
 ## 附录 B：和设计文档的一一映射

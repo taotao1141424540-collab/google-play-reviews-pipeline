@@ -139,11 +139,12 @@ google play/
 │       └── monitoring_report.md      # 本次 run 的人读摘要
 ├── scripts/
 │   └── 07_monitor/
+│       ├── __init__.py
 │       ├── _runlog.py                # 上下文管理器：写 pipeline_runs.jsonl
-│       ├── collect_run_metrics.py    # 聚合 → history CSV
-│       └── check_drift_and_alerts.py # 对比 → alerts + markdown
-└── docs/
-    └── monitoring_design.md          # 本文件
+│       ├── collect_run_metrics.py    # 聚合 → history CSV（main 外包 run_logger）
+│       ├── check_drift_and_alerts.py # 对比 → alerts + markdown（main 外包 run_logger）
+│       └── smoke_runlog.py           # 可选：本地验证 JSONL 写入
+└── （设计 / 规格文档）仓库目录 `monitoring layer设计方案/`：本注释版、`monitoring_impl_spec_*.md` 等
 ```
 
 ### 4.3 对现有代码的改动边界
@@ -337,7 +338,7 @@ drift:
 
 # 预期参数（可选）
 expected:
-  apps_count: 31
+  apps_count: 14   # 与当前仓库一致；请按你的 app_list 修改
 
 # 豁免（偶发噪声/人为例外时临时使用）
 mute:

@@ -24,26 +24,33 @@ This spec does **not** re-argue the business rationale. It answers 5 questions:
 
 ## 1. File Layout
 
-Adds **6 files + 2 directories** under `google play/`. **No changes** to scripts 01–06.
+**No changes** to business scripts 01–06. **Tracked source** for monitoring includes:
+
+- **`config/monitoring.yml`**
+- **Five** `.py` files under **`scripts/07_monitor/`**: `__init__.py`, `_runlog.py`, `collect_run_metrics.py`, `check_drift_and_alerts.py`, `smoke_runlog.py` (optional local smoke test for JSONL).
+- **`requirements.txt`** gains **`pyyaml>=6.0`** (alongside existing deps).
+
+**`logs/`** and **`reports/monitoring/`** are created at runtime. This repo’s root **`.gitignore`** ignores `google play/logs/` and `google play/reports/monitoring/` by default — clones will not contain history/alerts until you run the scripts.
 
 ```
 google play/
 ├── config/
 │   └── monitoring.yml                          # NEW  thresholds, drift params, mutes
-├── logs/                                       # NEW dir
-│   └── pipeline_runs.jsonl                     # RUNTIME — one JSON per run
+├── logs/                                       # RUNTIME dir
+│   └── pipeline_runs.jsonl                     # one JSON line per monitored `main` (run_logger)
 ├── reports/
-│   └── monitoring/                             # NEW dir
+│   └── monitoring/                             # RUNTIME dir
 │       ├── data_quality_history.csv            # RUNTIME append
 │       ├── distribution_history.csv            # RUNTIME append
 │       ├── alerts.csv                          # RUNTIME append
 │       └── monitoring_report.md                # RUNTIME overwrite
 └── scripts/
     └── 07_monitor/
-        ├── __init__.py                         # NEW
-        ├── _runlog.py                          # NEW  run-level logging ctxmgr
-        ├── collect_run_metrics.py              # NEW  aggregate → history CSV
-        └── check_drift_and_alerts.py           # NEW  compare → alerts + report
+        ├── __init__.py
+        ├── _runlog.py                          # run_logger → JSONL
+        ├── collect_run_metrics.py              # aggregate → history; main wrapped with run_logger
+        ├── check_drift_and_alerts.py           # compare → alerts + report; main wrapped with run_logger
+        └── smoke_runlog.py                     # optional smoke for _runlog
 ```
 
 **Design principles (as enforced by the layout):**
@@ -66,7 +73,7 @@ google play/
 | `reports/eda_section_b/B3_daily_volume.csv` | same | `date, reviews` | Leave empty |
 | `reports/eda_section_c/C2_english_subset_summary.csv` | same | `english_share` (or equiv.) | Leave empty |
 
-> **Key contract**: missing files become **NaN rows**, never ERRORs. ERRORs come from **violations of values**, not absence of inputs.
+> **Key contract**: **`collect_run_metrics`** writes **NaN / empty** when upstream files are missing — it does **not** append to `alerts.csv`. **`check_drift_and_alerts`** **WARN**s and exits early if **DQ history** is missing/empty. **ERROR** still means **threshold violations** or **SQLite row mismatch**, not “some upstream business CSV was absent”.
 
 ### 2.2 Outputs (produced by the monitor)
 
@@ -124,7 +131,7 @@ run_ts, level, metric, current, baseline_or_threshold, rule, message
 ```
 
 - `level ∈ {INFO, WARN, ERROR}`
-- `rule ∈ {threshold_max, threshold_min, psi_max, zscore_max, spike_ratio, eq}`
+- `rule` includes threshold/drift: `threshold_max`, `threshold_min`, `psi_max`, `zscore_max`, `spike_ratio`, `eq`; plus degradation/metadata such as **`cold_start`**, **`missing`**, **`empty`**, **`parse_error`**, **`unknown_subset`**, `mismatch`, etc. (see code — not an exhaustive closed set).
 
 #### `reports/monitoring/monitoring_report.md`
 
@@ -274,12 +281,14 @@ Design-doc metrics that are not delivery red-lines (e.g. `short_text_rate_lt5`) 
 Full template: see design doc §6. Here is the **loading contract**:
 
 ```python
-required_sections = ["thresholds", "drift", "expected"]
+# Merge: for each top-level key present in the YAML file, update the built-in DEFAULTS
+# (omitted keys keep their defaults). If the file is missing or PyYAML fails, use DEFAULTS
+# as-is and emit a config_file WARN.
 
 DEFAULTS = {
     "thresholds": {...},  # mirror design doc §6
     "drift":      {...},
-    "expected":   {"apps_count": 31},
+    "expected":   {"apps_count": 14},  # align with repo monitoring.yml; fallback if yml missing
     "mute":       [],
 }
 ```
@@ -320,13 +329,15 @@ pyyaml>=6.0
 
 | Situation | Behavior |
 |-----------|----------|
-| Upstream CSV missing | Write NaN for the corresponding columns; emit one `WARN: <file>_missing` |
-| `monitoring.yml` missing | Use DEFAULTS; emit `WARN: config_missing_using_defaults` |
-| History < `baseline_window` | Skip drift; emit `INFO: cold_start_skipping_drift` |
-| PSI with 0 bins | Apply `eps=1e-6`; never log(0) |
-| `jsonl` write fails (disk full) | Raise; business script re-raises as usual (only matters in Phase 2) |
+| Upstream CSV missing (`collect_run_metrics`) | Write **NaN** for affected columns; **no** `alerts.csv` row for “file missing” (collect does not write alerts) |
+| `data_quality_history.csv` missing or empty | `check_drift_and_alerts`: **WARN** (`metric=data_quality_history`, rule=`missing` / `empty`), **early exit** code `0` — no hard thresholds / SQLite / drift |
+| `distribution_history.csv` missing or empty | **WARN** (`metric=distribution_history`, rule=`missing`); skip drift block; hard thresholds still run |
+| `distribution_history` row count `< baseline_window + 1` (default `< 6`) | Skip PSI / z-score / spike / en_share drift; **INFO** (`metric=drift`, rule=`cold_start`) |
+| `monitoring.yml` missing or unreadable | Use built-in **DEFAULTS**; **WARN** (`metric=config_file`, rule=`missing` or `parse_error`) |
+| PSI with 0 bins | `eps=1e-6`; never log(0) |
+| `jsonl` write fails (disk full) | Raise; propagates through `run_logger` (same when business scripts wrap in Phase 2) |
 
-**Rule of thumb**: prefer **false negatives** over **false positives**. All recoverable errors degrade to WARN.
+**Rule of thumb**: ERROR only from hard-threshold violations and SQLite row mismatch (etc.); missing DQ history → WARN early exit, not fabricated hard checks.
 
 ---
 
@@ -367,10 +378,12 @@ Expected: both history CSVs gain one row; `alerts.csv` may be 0 or more rows; `m
 - Re-run drift.
 - Expected: relevant WARNs.
 
-### 9.4 Cold start
+### 9.4 Cold start (drift)
 
-- Empty `data_quality_history.csv`.
-- Expected: only hard thresholds run; `cold_start_skipping_drift` recorded.
+- Keep **`data_quality_history.csv`** non-empty (otherwise check exits with WARN first). Make **`distribution_history.csv`** have **fewer than `baseline_window + 1`** rows (default fewer than 6).
+- Expected: hard thresholds + SQLite checks still run; drift skipped; `monitoring_report.md` INFO lists **`drift`** with rule **`cold_start`**.
+
+> If **`data_quality_history.csv`** is missing or empty, the implementation **does not** run hard thresholds — it WARNs and returns (run `collect_run_metrics.py` first).
 
 ---
 
@@ -427,7 +440,7 @@ echo "exit=$?"
 cd "google play"
 mkdir -p config logs reports/monitoring scripts/07_monitor
 touch config/monitoring.yml
-touch scripts/07_monitor/{__init__.py,_runlog.py,collect_run_metrics.py,check_drift_and_alerts.py}
+touch scripts/07_monitor/{__init__.py,_runlog.py,collect_run_metrics.py,check_drift_and_alerts.py,smoke_runlog.py}
 ```
 
 ## Appendix B — Mapping to the design doc
