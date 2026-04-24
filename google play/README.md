@@ -103,7 +103,7 @@ Run from the **`google play/`** root with your venv activated.
 
 ```bash
 python3 -m venv .venv && source .venv/bin/activate
-pip install pandas openpyxl google-play-scraper langdetect matplotlib python-pptx reportlab
+pip install pandas openpyxl google-play-scraper langdetect matplotlib python-pptx reportlab pyyaml
 export MPLCONFIGDIR="$(pwd)/.mplconfig" && mkdir -p .mplconfig
 ```
 
@@ -125,8 +125,22 @@ export MPLCONFIGDIR="$(pwd)/.mplconfig" && mkdir -p .mplconfig
 |  | `sqlite3 data/warehouse/play_reviews_en.db < sql/verify.sql` | Same for English DB |
 | 10 | `python3 scripts/05_warehouse/run_sqlite_verification.py --both` | Both `.db` files exist |
 | 11 | `python3 scripts/06_insights/apply_time_window_sampling.py …` | Optional; see `--help` |
+| 12 | `python3 scripts/07_monitor/collect_run_metrics.py` | After §4.2 steps 1–4 (or full run): appends `reports/monitoring/*_history.csv` |
+| 13 | `python3 scripts/07_monitor/check_drift_and_alerts.py` | After step 12: writes `alerts.csv`, `monitoring_report.md`; exit `1` if any ERROR |
 
 **Do not run `sql/schema.sql` alone for normal workflow:** `load_to_sqlite.py` applies it via `executescript(schema.sql)` after connecting.
+
+### 4.3 Monitoring (`scripts/07_monitor/`)
+
+Read-only over pipeline outputs. Thresholds in `config/monitoring.yml`. Typical order after a successful run:
+
+```bash
+python3 scripts/07_monitor/collect_run_metrics.py
+python3 scripts/07_monitor/check_drift_and_alerts.py
+echo "exit=$?"
+```
+
+See `monitoring layer设计方案/monitoring_impl_spec_en.md` for full behavior.
 
 ---
 
@@ -170,6 +184,8 @@ python3 scripts/06_insights/export_spike_days.py
 python3 scripts/05_warehouse/load_to_sqlite.py
 python3 scripts/05_warehouse/load_to_sqlite.py --english-only
 python3 scripts/05_warehouse/run_sqlite_verification.py --both
+python3 scripts/07_monitor/collect_run_metrics.py
+python3 scripts/07_monitor/check_drift_and_alerts.py
 ```
 
 Run **`apply_time_window_sampling.py`** when needed (see in-script examples).
@@ -187,6 +203,7 @@ Run **`apply_time_window_sampling.py`** when needed (see in-script examples).
 | Spikes | `docs/spike_dates_top10.csv`, `docs/export_spike_days_readme.md` |
 | Warehouse | `data/warehouse/play_reviews.db`, `play_reviews_en.db` |
 | Verification text | `docs/sqlite_verification_results*.txt` |
+| Monitoring | `reports/monitoring/*_history.csv`, `alerts.csv`, `monitoring_report.md`, `logs/pipeline_runs.jsonl` |
 | Modeling subset (if run) | `data/processed/clean_en_time_window.csv`, `time_window_sampling_manifest.json` |
 
 ---

@@ -1,0 +1,17 @@
+# macOS / local editor
+.DS_Store
+**/.DS_Store
+.Rhistory
+**/.Rhistory
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.venv/
+venv/
+env/
+
+# Monitoring runtime outputs (regenerate: collect_run_metrics + check_drift)
+google play/logs/
+google play/reports/monitoring/

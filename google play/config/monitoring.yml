@@ -1,0 +1,24 @@
+# Monitoring MVP config — see monitoring layer设计方案/monitoring_design_mentor.md §6
+thresholds:
+  raw_rows_min: 5000
+  apps_count_min_delta: 2
+  duplicate_rate_max: 0.02
+  empty_text_rate_max: 0.01
+  parseable_time_rate_min: 0.99
+  parseable_score_rate_min: 0.99
+  english_rate_min: 0.50
+  clean_en_rows_min: 8000
+  missing_key_fields_rate_max: 0.005
+  short_text_rate_lt5_warn: 0.30
+
+drift:
+  baseline_window: 5
+  psi_rating_max: 0.20
+  zscore_len_mean_max: 3.0
+  daily_volume_spike_ratio: 2.0
+  en_share_drop_max: 0.10
+
+expected:
+  apps_count: 14
+
+mute: []

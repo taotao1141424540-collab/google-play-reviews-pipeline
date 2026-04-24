@@ -1,0 +1,11 @@
+# Core pipeline (see README)
+pandas>=2.0
+openpyxl>=3.1
+google-play-scraper>=1.2
+langdetect>=1.0.9
+matplotlib>=3.8
+python-pptx>=0.6.21
+reportlab>=4.0
+
+# Monitoring layer (M1+)
+pyyaml>=6.0
