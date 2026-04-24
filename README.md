@@ -246,13 +246,3 @@ Anyone cloning this repo can rebuild the pipeline end-to-end if they follow the 
 ## 10. Git and large files
 
 Prefer **`.gitignore`** for large **`data/`** CSVs, **`data/warehouse/*.db`**, bulky xlsx, plus **`google play/logs/`** and **`google play/reports/monitoring/`** (monitoring runtime outputs). Ship samples in-repo and host full dumps via cloud / Releases with a documented link (see **§9**).
-
----
-
-## 11. Limitations and compliance
-
-- **`google-play-scraper`** is unofficial; upstream changes may break scraping or fields.  
-- **`langdetect`** is heuristic; short text may be unstable.  
-- Section **E** flags are rule-based, not ground truth.  
-- Daily **spikes** may mix real traffic and crawl timing—interpret with B3 + `spike_dates_top10.csv`.  
-- Comply with **Google Play Terms of Service**, course rules, and mentor policies.
