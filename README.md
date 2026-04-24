@@ -15,7 +15,9 @@ google play/
 ├── .mplconfig/                  # Matplotlib cache (set MPLCONFIGDIR when plotting in EDA)
 ├── config/
 │   ├── README.md                # Column descriptions for app_list
-│   └── app_list.xlsx            # Apps to scrape (required: app_id)
+│   ├── app_list.xlsx            # Apps to scrape (required: app_id)
+│   └── monitoring.yml           # Monitoring thresholds & drift params (`07_monitor`)
+├── logs/                        # Runtime: `pipeline_runs.jsonl` (written by `07_monitor` scripts)
 ├── data/
 │   ├── raw/
 │   │   └── google_play_reviews_raw.csv    # Scraper output (default)
@@ -36,6 +38,7 @@ google play/
 │   ├── collection_summary.md
 │   ├── raw_collection_metrics.csv
 │   ├── quality_report.csv                 # Layered quality metrics (p0/p1/p2)
+│   ├── monitoring/                      # Runtime: metric history, alerts, report (`07_monitor`)
 │   ├── eda_sections_workbook.xlsx         # All EDA sheets (merge script)
 │   ├── eda_section_a_workbook.xlsx … e   # Per-section workbooks
 │   ├── EDA_Conclusion_Bilingual.pptx / .pdf   # Deck (04_export)
@@ -49,9 +52,14 @@ google play/
 │   ├── 05_warehouse/
 │   │   ├── load_to_sqlite.py
 │   │   └── run_sqlite_verification.py
-│   └── 06_insights/
-│       ├── export_spike_days.py
-│       └── apply_time_window_sampling.py
+│   ├── 06_insights/
+│   │   ├── export_spike_days.py
+│   │   └── apply_time_window_sampling.py
+│   └── 07_monitor/
+│       ├── collect_run_metrics.py
+│       ├── check_drift_and_alerts.py
+│       ├── _runlog.py
+│       └── smoke_runlog.py
 └── sql/
     ├── schema.sql               # DDL (executed inside load_to_sqlite)
     └── verify.sql               # Ad-hoc CLI checks (see below)
@@ -60,6 +68,7 @@ google play/
 Notes:
 
 - **`run_sqlite_verification.py`** lives under `scripts/05_warehouse/` (see §6).
+- **`logs/`** and **`reports/monitoring/`** are created when you run **`scripts/07_monitor/`** (see §4.3); they may be absent in a fresh clone until then.
 - There is **no** `templates/`, **no** `scripts/README.md`, **no** `docs/time_window_sampling_note.md` in this tree by default (you can add a long-form time-window strategy note under `docs/` if needed; spike + sampling scripts still work standalone).
 - **`scripts/01_collect/.idea/`** is IDE metadata and can be ignored.
 
@@ -92,6 +101,9 @@ Main outputs: **`clean_all_languages.csv`** (post-P0, all languages) and **`clea
 | **`scripts/05_warehouse/`** | `run_sqlite_verification.py` | Query DB → **`docs/sqlite_verification_results*.txt`**; use **`--both`** to verify both databases |
 | **`scripts/06_insights/`** | `export_spike_days.py` | Read **`reports/eda_section_b/B3_daily_volume.csv`** → **`docs/spike_dates_top10.csv`** |
 | **`scripts/06_insights/`** | `apply_time_window_sampling.py` | Optional: spike-day removal / per-day cap / time split on `clean_en_only` |
+| **`scripts/07_monitor/`** | `collect_run_metrics.py` | After upstream reports exist: append **`reports/monitoring/data_quality_history.csv`** + **`distribution_history.csv`** |
+| **`scripts/07_monitor/`** | `check_drift_and_alerts.py` | Read config + histories + SQLite: **`reports/monitoring/alerts.csv`**, **`monitoring_report.md`**; exit **`1`** if any ERROR |
+| **`scripts/07_monitor/`** | `_runlog.py`, `smoke_runlog.py` | Run-level JSONL logging + small self-test for the log writer |
 
 ---
 
@@ -103,7 +115,8 @@ Run from the **`google play/`** root with your venv activated.
 
 ```bash
 python3 -m venv .venv && source .venv/bin/activate
-pip install pandas openpyxl google-play-scraper langdetect matplotlib python-pptx reportlab
+pip install -r requirements.txt
+# Or equivalently: pip install pandas openpyxl google-play-scraper langdetect matplotlib python-pptx reportlab pyyaml
 export MPLCONFIGDIR="$(pwd)/.mplconfig" && mkdir -p .mplconfig
 ```
 
@@ -125,8 +138,27 @@ export MPLCONFIGDIR="$(pwd)/.mplconfig" && mkdir -p .mplconfig
 |  | `sqlite3 data/warehouse/play_reviews_en.db < sql/verify.sql` | Same for English DB |
 | 10 | `python3 scripts/05_warehouse/run_sqlite_verification.py --both` | Both `.db` files exist |
 | 11 | `python3 scripts/06_insights/apply_time_window_sampling.py …` | Optional; see `--help` |
+| 12 | `python3 scripts/07_monitor/collect_run_metrics.py` | After upstream CSVs exist (e.g. §4.2 steps **1–4** minimum, or a full run through EDA): appends `reports/monitoring/*_history.csv` |
+| 13 | `python3 scripts/07_monitor/check_drift_and_alerts.py` | After step **12**; reads `data/warehouse/play_reviews.db` for optional SQLite row match — run **after steps 7–8** if you want that check to apply (otherwise subset metadata may be unknown and the check is skipped with INFO) |
 
 **Do not run `sql/schema.sql` alone for normal workflow:** `load_to_sqlite.py` applies it via `executescript(schema.sql)` after connecting.
+
+### 4.3 Monitoring (`scripts/07_monitor/`)
+
+Read-only over pipeline outputs. Thresholds in `config/monitoring.yml`.
+
+- **`collect_run_metrics.py`** and **`check_drift_and_alerts.py`** wrap **`with run_logger(...)`** and append one JSON line each to **`logs/pipeline_runs.jsonl`** (same schema as design doc; Phase 2 can extend this to 01–06).
+- Optional: **`python3 scripts/07_monitor/smoke_runlog.py`** — quick local check that `_runlog` can write JSONL.
+
+Typical order after a successful run:
+
+```bash
+python3 scripts/07_monitor/collect_run_metrics.py
+python3 scripts/07_monitor/check_drift_and_alerts.py
+echo "exit=$?"
+```
+
+See `monitoring layer设计方案/monitoring_impl_spec_en.md` for full behavior.
 
 ---
 
@@ -170,6 +202,8 @@ python3 scripts/06_insights/export_spike_days.py
 python3 scripts/05_warehouse/load_to_sqlite.py
 python3 scripts/05_warehouse/load_to_sqlite.py --english-only
 python3 scripts/05_warehouse/run_sqlite_verification.py --both
+python3 scripts/07_monitor/collect_run_metrics.py
+python3 scripts/07_monitor/check_drift_and_alerts.py
 ```
 
 Run **`apply_time_window_sampling.py`** when needed (see in-script examples).
@@ -187,6 +221,7 @@ Run **`apply_time_window_sampling.py`** when needed (see in-script examples).
 | Spikes | `docs/spike_dates_top10.csv`, `docs/export_spike_days_readme.md` |
 | Warehouse | `data/warehouse/play_reviews.db`, `play_reviews_en.db` |
 | Verification text | `docs/sqlite_verification_results*.txt` |
+| Monitoring (local, after running §4.3) | `reports/monitoring/*_history.csv`, `alerts.csv`, `monitoring_report.md`, `logs/pipeline_runs.jsonl` — **not committed** by default (see root `.gitignore`); recreate with steps 12–13 |
 | Modeling subset (if run) | `data/processed/clean_en_time_window.csv`, `time_window_sampling_manifest.json` |
 
 ---
@@ -200,7 +235,7 @@ Run **`apply_time_window_sampling.py`** when needed (see in-script examples).
 Anyone cloning this repo can rebuild the pipeline end-to-end if they follow the same steps:
 
 1. **Clone** the repository.
-2. **Python environment:** use Python **3.10+** (3.9+ usually works). Create a venv and install packages listed in **§4.1** (`pandas`, `openpyxl`, `google-play-scraper`, `langdetect`, `matplotlib`, `python-pptx`, `reportlab`).
+2. **Python environment:** use Python **3.10+** (3.9+ usually works). Create a venv and run **`pip install -r requirements.txt`** (includes **`pyyaml`** for monitoring).
 3. **`config/app_list.xlsx`:** prepare the app list per **`config/README.md`** (required column `app_id`). Scraping needs **network** access; runtime scales with `target_reviews`.
 4. **Same as Data access:** confirm **`data/`** appears empty or missing large files until you run **`01_collect`** onward (**§7** skeleton).
 5. **Random seeds:** CLI flags such as **`--random-state`** (e.g. `apply_time_window_sampling.py`) keep downsampling reproducible; raw row counts still depend on **when** you scrape and on third-party APIs.
@@ -210,7 +245,7 @@ Anyone cloning this repo can rebuild the pipeline end-to-end if they follow the 
 
 ## 10. Git and large files
 
-Prefer **`.gitignore`** for large **`data/`** CSVs, **`data/warehouse/*.db`**, bulky xlsx; ship samples in-repo and host full dumps via cloud / Releases with a documented link (see **§9**).
+Prefer **`.gitignore`** for large **`data/`** CSVs, **`data/warehouse/*.db`**, bulky xlsx, plus **`google play/logs/`** and **`google play/reports/monitoring/`** (monitoring runtime outputs). Ship samples in-repo and host full dumps via cloud / Releases with a documented link (see **§9**).
 
 ---
 
